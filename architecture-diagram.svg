@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1240" height="800" viewBox="0 0 1240 800" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#374151"/>
+    </marker>
+    <marker id="arrowBlue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1d4ed8"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1240" height="800" fill="#ffffff"/>
+
+  <!-- Title -->
+  <text x="620" y="42" text-anchor="middle" font-size="26" font-weight="700" fill="#111827">Arquitectura del POC — Microservices Architecture Style</text>
+  <text x="620" y="68" text-anchor="middle" font-size="15" fill="#6b7280">Customer Service · Order Service · Processing Service — comunicación REST sobre Docker Compose</text>
+
+  <!-- Docker Compose boundary -->
+  <rect x="50" y="96" width="1140" height="600" rx="16" fill="#f8fafc" stroke="#94a3b8" stroke-width="2" stroke-dasharray="8 6"/>
+  <text x="76" y="126" font-size="15" font-weight="700" fill="#334155">Docker Compose — red interna "microservices-net" (bridge)</text>
+
+  <!-- Client / User -->
+  <g>
+    <rect x="530" y="148" width="180" height="64" rx="10" fill="#111827"/>
+    <text x="620" y="174" text-anchor="middle" font-size="14" font-weight="700" fill="#ffffff">Cliente / Usuario</text>
+    <text x="620" y="194" text-anchor="middle" font-size="11" fill="#cbd5e1">curl / Swagger UI</text>
+  </g>
+
+  <!-- Order Service (center orchestrator) -->
+  <g>
+    <rect x="500" y="336" width="240" height="120" rx="12" fill="#1d4ed8"/>
+    <text x="620" y="368" text-anchor="middle" font-size="17" font-weight="700" fill="#ffffff">Order Service</text>
+    <text x="620" y="390" text-anchor="middle" font-size="12" fill="#dbeafe">FastAPI · contenedor propio</text>
+    <text x="620" y="408" text-anchor="middle" font-size="12" fill="#dbeafe">puerto host 8002 → 8000</text>
+    <text x="620" y="426" text-anchor="middle" font-size="11" fill="#bfdbfe">Datos propios: órdenes (in-memory)</text>
+  </g>
+
+  <!-- Customer Service (left) -->
+  <g>
+    <rect x="110" y="336" width="240" height="120" rx="12" fill="#047857"/>
+    <text x="230" y="368" text-anchor="middle" font-size="17" font-weight="700" fill="#ffffff">Customer Service</text>
+    <text x="230" y="390" text-anchor="middle" font-size="12" fill="#d1fae5">FastAPI · contenedor propio</text>
+    <text x="230" y="408" text-anchor="middle" font-size="12" fill="#d1fae5">puerto host 8001 → 8000</text>
+    <text x="230" y="426" text-anchor="middle" font-size="11" fill="#a7f3d0">Datos propios: clientes (in-memory)</text>
+  </g>
+
+  <!-- Processing Service (right) -->
+  <g>
+    <rect x="890" y="336" width="270" height="120" rx="12" fill="#b45309"/>
+    <text x="1025" y="364" text-anchor="middle" font-size="17" font-weight="700" fill="#ffffff">Processing Service</text>
+    <text x="1025" y="386" text-anchor="middle" font-size="12" fill="#fef3c7">FastAPI · escalable (N réplicas)</text>
+    <text x="1025" y="404" text-anchor="middle" font-size="12" fill="#fef3c7">expuesto solo en red interna</text>
+    <text x="1025" y="422" text-anchor="middle" font-size="11" fill="#fde68a">Datos propios: resultados (in-memory)</text>
+  </g>
+
+  <!-- scaled replicas ghost boxes for processing -->
+  <rect x="902" y="472" width="270" height="118" rx="12" fill="none" stroke="#b45309" stroke-width="2" stroke-dasharray="5 4"/>
+  <rect x="914" y="484" width="270" height="118" rx="12" fill="none" stroke="#b45309" stroke-width="1.5" stroke-dasharray="5 4" opacity="0.6"/>
+  <text x="1049" y="607" text-anchor="middle" font-size="11" fill="#92400e">réplicas adicionales (docker compose --scale)</text>
+
+  <!-- Individual data stores (simple rounded boxes, no overlapping strokes) -->
+  <g>
+    <rect x="150" y="494" width="160" height="46" rx="10" fill="#d1fae5" stroke="#047857" stroke-width="1.5"/>
+    <text x="230" y="522" text-anchor="middle" font-size="11" font-weight="600" fill="#065f46">Almacén "customers"</text>
+  </g>
+  <g>
+    <rect x="540" y="494" width="160" height="46" rx="10" fill="#dbeafe" stroke="#1d4ed8" stroke-width="1.5"/>
+    <text x="620" y="522" text-anchor="middle" font-size="11" font-weight="600" fill="#1e3a8a">Almacén "orders"</text>
+  </g>
+
+  <!-- Arrows: client -> order-service -->
+  <line x1="620" y1="212" x2="620" y2="334" stroke="#111827" stroke-width="2.2" marker-end="url(#arrow)"/>
+  <text x="632" y="268" font-size="11" fill="#111827">HTTP REST</text>
+  <text x="632" y="282" font-size="11" fill="#111827">POST /customers, POST /orders</text>
+
+  <!-- Order -> Customer (validation) -->
+  <line x1="500" y1="374" x2="352" y2="374" stroke="#1d4ed8" stroke-width="2.2" marker-end="url(#arrowBlue)"/>
+  <text x="358" y="356" font-size="11" fill="#1d4ed8">1. GET /customers/&#123;id&#125;</text>
+  <text x="358" y="370" font-size="11" fill="#1d4ed8">(validar cliente)</text>
+
+  <!-- Order -> Processing -->
+  <line x1="740" y1="386" x2="888" y2="386" stroke="#1d4ed8" stroke-width="2.2" marker-end="url(#arrowBlue)"/>
+  <text x="746" y="368" font-size="11" fill="#1d4ed8">2. POST /process</text>
+  <text x="746" y="410" font-size="11" fill="#1d4ed8">(procesar orden)</text>
+
+  <!-- Legend -->
+  <g>
+    <rect x="76" y="626" width="16" height="16" fill="#1d4ed8"/>
+    <text x="98" y="639" font-size="12" fill="#374151">Comunicación síncrona REST (JSON sobre HTTP)</text>
+    <rect x="76" y="652" width="16" height="16" fill="none" stroke="#94a3b8" stroke-width="2" stroke-dasharray="6 4"/>
+    <text x="98" y="665" font-size="12" fill="#374151">Frontera de despliegue: red y contenedores gestionados por Docker Compose</text>
+  </g>
+
+  <text x="1170" y="740" text-anchor="end" font-size="11" fill="#9ca3af">Cada servicio: Dockerfile propio, base de datos propia, ciclo de vida y escalado independientes.</text>
+</svg>

@@ -1,0 +1,46 @@
+version: "3.9"
+
+# Cada microservicio corre en su propio contenedor, con su propio Dockerfile,
+# y se comunica con los demás únicamente a través de la red interna de Compose
+# (service discovery por nombre de servicio) y de sus APIs REST/HTTP.
+
+services:
+  customer-service:
+    build: ./customer-service
+    container_name: customer-service
+    ports:
+      - "8001:8000"   # host:contenedor -> http://localhost:8001/docs
+    networks:
+      - microservices-net
+    restart: unless-stopped
+
+  processing-service:
+    build: ./processing-service
+    # Sin "container_name" fijo ni puerto de host publicado: permite escalar
+    # este servicio a varias réplicas con `docker compose up --scale
+    # processing-service=3` sin conflictos de puertos. Se accede solo desde
+    # la red interna (por eso se usa "expose" en vez de "ports").
+    expose:
+      - "8000"
+    networks:
+      - microservices-net
+    restart: unless-stopped
+
+  order-service:
+    build: ./order-service
+    container_name: order-service
+    ports:
+      - "8002:8000"   # host:contenedor -> http://localhost:8002/docs
+    environment:
+      - CUSTOMER_SERVICE_URL=http://customer-service:8000
+      - PROCESSING_SERVICE_URL=http://processing-service:8000
+    depends_on:
+      - customer-service
+      - processing-service
+    networks:
+      - microservices-net
+    restart: unless-stopped
+
+networks:
+  microservices-net:
+    driver: bridge
