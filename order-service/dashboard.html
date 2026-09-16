@@ -149,31 +149,18 @@
 <main>
 
   <div class="hint">
-    Por defecto este panel llama a los tres microservicios en <code>http://127.0.0.1</code> (correr local con
-    uvicorn). Si los estás corriendo en <strong>GitHub Codespaces</strong> (u otro host), abre "Configurar URLs"
-    abajo y pega las 3 URLs reenviadas (deben estar marcadas como <strong>Public</strong> en la pestaña "Ports").
-  </div>
-
-  <div class="card" style="margin-bottom:24px">
-    <h3 style="margin:0">⚙️ Configurar URLs de los servicios</h3>
-    <div class="row2">
-      <div><label>Customer Service (base URL)</label><input id="cfgCustomer" value="http://127.0.0.1:8001" /></div>
-      <div><label>Order Service (base URL)</label><input id="cfgOrder" value="http://127.0.0.1:8002" /></div>
-    </div>
-    <div><label>Processing Service (base URL)</label><input id="cfgProcessing" value="http://127.0.0.1:8003" /></div>
-    <div style="display:flex; gap:8px">
-      <button onclick="applyConfig()">Aplicar</button>
-      <button class="secondary" onclick="resetConfig()">Restaurar 127.0.0.1 (local)</button>
-    </div>
+    Este panel se sirve directamente desde <strong>Order Service</strong> (<code>/dashboard</code>) y llama a los
+    tres microservicios usando rutas relativas al mismo origen — así funciona igual corriendo localmente con
+    uvicorn, con Docker Compose, o en GitHub Codespaces, sin configurar URLs ni pelear con CORS.
   </div>
 
   <div class="services-row">
     <div class="svc-card" id="svc-customer"><div class="dot" id="dot-customer"></div>
-      <div class="svc-info"><strong>Customer Service</strong><span id="lbl-customer">127.0.0.1:8001</span></div></div>
+      <div class="svc-info"><strong>Customer Service</strong><span id="lbl-customer">vía Order Service</span></div></div>
     <div class="svc-card" id="svc-order"><div class="dot" id="dot-order"></div>
-      <div class="svc-info"><strong>Order Service</strong><span id="lbl-order">127.0.0.1:8002</span></div></div>
+      <div class="svc-info"><strong>Order Service</strong><span id="lbl-order">origen actual</span></div></div>
     <div class="svc-card" id="svc-processing"><div class="dot" id="dot-processing"></div>
-      <div class="svc-info"><strong>Processing Service</strong><span id="lbl-processing">127.0.0.1:8003</span></div></div>
+      <div class="svc-info"><strong>Processing Service</strong><span id="lbl-processing">vía Order Service</span></div></div>
   </div>
 
   <div class="diagram">
@@ -234,32 +221,10 @@
 </main>
 
 <script>
-  const BASE = {
-    customer: "http://127.0.0.1:8001",
-    order: "http://127.0.0.1:8002",
-    processing: "http://127.0.0.1:8003",
-  };
-
-  function stripTrailingSlash(u) { return u.replace(/\/+$/, ""); }
-
-  function applyConfig() {
-    BASE.customer = stripTrailingSlash(document.getElementById("cfgCustomer").value.trim());
-    BASE.order = stripTrailingSlash(document.getElementById("cfgOrder").value.trim());
-    BASE.processing = stripTrailingSlash(document.getElementById("cfgProcessing").value.trim());
-    document.getElementById("lbl-customer").textContent = BASE.customer.replace(/^https?:\/\//, "");
-    document.getElementById("lbl-order").textContent = BASE.order.replace(/^https?:\/\//, "");
-    document.getElementById("lbl-processing").textContent = BASE.processing.replace(/^https?:\/\//, "");
-    log("muted", `Configuración aplicada → customer=${BASE.customer} | order=${BASE.order} | processing=${BASE.processing}`);
-    checkAll();
-  }
-
-  function resetConfig() {
-    document.getElementById("cfgCustomer").value = "http://127.0.0.1:8001";
-    document.getElementById("cfgOrder").value = "http://127.0.0.1:8002";
-    document.getElementById("cfgProcessing").value = "http://127.0.0.1:8003";
-    applyConfig();
-  }
-
+  // Todo el panel se sirve desde Order Service y usa rutas relativas al mismo
+  // origen: Order Service (que ya tiene httpx configurado hacia los otros dos)
+  // actúa como "gateway" para /api/health/* y /api/customers, evitando por
+  // completo problemas de CORS o de proxys de autenticación (Codespaces, etc).
   const logEl = document.getElementById("log");
   function log(cls, text) {
     const line = document.createElement("div");
@@ -277,18 +242,18 @@
     card.classList.toggle("active", state === "online");
   }
 
-  async function checkHealth(name, base) {
+  async function checkHealth(name, path) {
     try {
-      const r = await fetch(base + "/health", { cache: "no-store" });
+      const r = await fetch(path, { cache: "no-store" });
       setDot(name, r.ok ? "online" : "offline");
     } catch (e) {
       setDot(name, "offline");
     }
   }
   function checkAll() {
-    checkHealth("customer", BASE.customer);
-    checkHealth("order", BASE.order);
-    checkHealth("processing", BASE.processing);
+    checkHealth("customer", "/api/health/customer");
+    checkHealth("order", "/health");
+    checkHealth("processing", "/api/health/processing");
   }
   checkAll();
   setInterval(checkAll, 4000);
@@ -321,9 +286,9 @@
     pulse("node-customer");
     const name = document.getElementById("custName").value.trim();
     const email = document.getElementById("custEmail").value.trim();
-    log("muted", `POST ${BASE.customer}/customers`);
+    log("muted", `POST /api/customers  (Order Service → Customer Service)`);
     try {
-      const r = await fetch(BASE.customer + "/customers", {
+      const r = await fetch("/api/customers", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name, email }),
@@ -339,8 +304,8 @@
       document.getElementById("orderCustomerId").value = data.id;
       showResult("resultCustomer", "ok", `Cliente creado ✔\nid: ${data.id}\nnombre: ${data.name}\ncorreo: ${data.email}`);
     } catch (e) {
-      log("err", `✖ No se pudo conectar con Customer Service (${BASE.customer}). ¿Está corriendo?`);
-      showResult("resultCustomer", "err", `No se pudo conectar con Customer Service en ${BASE.customer}.\n¿Está corriendo? Si usas Codespaces, revisa que el puerto esté marcado como "Public".`);
+      log("err", `✖ No se pudo conectar con Customer Service (vía Order Service). ¿Está corriendo?`);
+      showResult("resultCustomer", "err", `No se pudo conectar con Customer Service.\n¿Está corriendo?`);
       setDot("customer", "offline");
     }
   }
@@ -358,9 +323,9 @@
       return;
     }
 
-    log("muted", `POST ${BASE.order}/orders  (customer_id=${customer_id})`);
+    log("muted", `POST /orders  (customer_id=${customer_id})`);
     try {
-      const r = await fetch(BASE.order + "/orders", {
+      const r = await fetch("/orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ customer_id, items, total, simulate_processing_failure }),
@@ -415,8 +380,8 @@
       }
       loadOrders();
     } catch (e) {
-      log("err", `✖ No se pudo conectar con Order Service (${BASE.order}). ¿Está corriendo?`);
-      showResult("resultOrder", "err", `No se pudo conectar con Order Service en ${BASE.order}.\n¿Está corriendo? Si usas Codespaces, revisa que el puerto esté marcado como "Public".`);
+      log("err", `✖ No se pudo conectar con Order Service. ¿Está corriendo?`);
+      showResult("resultOrder", "err", `No se pudo conectar con Order Service.\n¿Está corriendo?`);
       setDot("order", "offline");
     }
   }
@@ -433,9 +398,9 @@
 
   async function retryProcessing(orderId) {
     pulse("node-order");
-    log("muted", `POST ${BASE.order}/orders/${orderId}/retry-processing`);
+    log("muted", `POST /orders/${orderId}/retry-processing`);
     try {
-      const r = await fetch(`${BASE.order}/orders/${orderId}/retry-processing`, { method: "POST" });
+      const r = await fetch(`/orders/${orderId}/retry-processing`, { method: "POST" });
       const data = await r.json();
       if (!r.ok) {
         log("err", `→ ${r.status} ${JSON.stringify(data)}`);
@@ -458,9 +423,9 @@
   }
 
   async function loadOrders() {
-    log("muted", `GET ${BASE.order}/orders`);
+    log("muted", `GET /orders`);
     try {
-      const r = await fetch(BASE.order + "/orders");
+      const r = await fetch("/orders");
       const data = await r.json();
       const body = document.getElementById("ordersBody");
       body.innerHTML = "";
