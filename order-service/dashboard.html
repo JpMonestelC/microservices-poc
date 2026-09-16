@@ -1,0 +1,479 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>PoC — Microservices Architecture Style</title>
+<style>
+  :root {
+    --navy: #12203D;
+    --navy2: #1B2F55;
+    --light: #F5F7FB;
+    --white: #FFFFFF;
+    --teal: #00B894;
+    --amber: #D98A00;
+    --coral: #E23636;
+    --ink: #0F172A;
+    --slate: #64748B;
+    --line: #E2E8F0;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "Segoe UI", Calibri, Arial, sans-serif;
+    background: var(--light);
+    color: var(--ink);
+  }
+  header {
+    background: var(--navy);
+    color: white;
+    padding: 28px 36px 24px;
+  }
+  header h1 { margin: 0 0 4px; font-size: 24px; }
+  header p { margin: 0; color: #9FB3D9; font-size: 14px; }
+
+  main { max-width: 1180px; margin: 0 auto; padding: 24px 24px 60px; }
+
+  .services-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  .svc-card {
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    transition: box-shadow .2s;
+  }
+  .svc-card.active { box-shadow: 0 0 0 3px rgba(0,184,148,.35); }
+  .dot { width: 12px; height: 12px; border-radius: 50%; background: #CBD5E1; flex-shrink: 0; transition: background .3s; }
+  .dot.online { background: var(--teal); box-shadow: 0 0 0 4px rgba(0,184,148,.18); }
+  .dot.offline { background: var(--coral); box-shadow: 0 0 0 4px rgba(226,54,54,.18); }
+  .svc-info strong { display: block; font-size: 14px; }
+  .svc-info span { font-size: 12px; color: var(--slate); }
+
+  .diagram {
+    background: white;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 28px 20px 20px;
+    margin-bottom: 24px;
+    position: relative;
+  }
+  .diagram h2 { margin: 0 0 18px; font-size: 14px; text-transform: uppercase; letter-spacing: .06em; color: var(--slate); }
+  .nodes { display: flex; align-items: center; justify-content: center; gap: 0; flex-wrap: wrap; }
+  .node {
+    width: 180px; min-height: 84px; border-radius: 10px; color: white;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 600; text-align: center; padding: 10px;
+    transition: transform .25s, box-shadow .25s; position: relative; z-index: 2;
+  }
+  .node small { font-weight: 400; opacity: .8; font-size: 11px; margin-top: 4px; }
+  .node.customer { background: #0E7C66; }
+  .node.order { background: #1D4ED8; }
+  .node.processing { background: #B45309; }
+  .node.pulse { transform: scale(1.06); box-shadow: 0 0 0 6px rgba(0,0,0,.06), 0 10px 20px rgba(0,0,0,.15); }
+  .arrow-wrap { width: 90px; display: flex; flex-direction: column; align-items: center; gap: 4px; position: relative; }
+  .arrow-line { width: 100%; height: 3px; background: #D8E0EF; border-radius: 2px; position: relative; overflow: hidden; }
+  .arrow-line .fill { position: absolute; inset: 0; background: var(--slate); transform: scaleX(0); transform-origin: left; transition: transform .35s, background .2s; }
+  .arrow-line.ok .fill { background: var(--teal); transform: scaleX(1); }
+  .arrow-line.fail .fill { background: var(--coral); transform: scaleX(1); }
+  .arrow-label { font-size: 10px; color: var(--slate); text-align: center; }
+
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px; }
+  .card {
+    background: white; border: 1px solid var(--line); border-radius: 12px; padding: 18px;
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .card h3 { margin: 0; font-size: 15px; }
+  .card .step { font-size: 11px; font-weight: 700; color: var(--teal); text-transform: uppercase; letter-spacing: .05em; }
+  .card label { font-size: 12px; color: var(--slate); display: block; margin-bottom: 3px; }
+  .card input, .card textarea {
+    width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; font-size: 13px; font-family: inherit;
+  }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .checkbox-row { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--slate); }
+  .checkbox-row input { width: auto; }
+  button {
+    background: var(--navy); color: white; border: none; border-radius: 8px;
+    padding: 10px 14px; font-size: 13px; font-weight: 600; cursor: pointer; transition: background .15s;
+  }
+  button:hover { background: var(--navy2); }
+  button:disabled { background: #CBD5E1; cursor: not-allowed; }
+  button.secondary { background: white; color: var(--navy); border: 1px solid var(--line); }
+  button.secondary:hover { background: var(--light); }
+
+  .result { border-radius: 8px; padding: 10px 12px; font-size: 12.5px; display: none; white-space: pre-wrap; word-break: break-word; }
+  .result.show { display: block; }
+  .result.ok { background: #ECFDF5; border: 1px solid #A7F3D0; color: #065F46; }
+  .result.warn { background: #FFFBEB; border: 1px solid #FDE68A; color: #92400E; }
+  .result.err { background: #FEF2F2; border: 1px solid #FCA5A5; color: #991B1B; }
+
+  #ordersList { font-size: 12.5px; max-height: 170px; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; }
+  #ordersList table { width: 100%; border-collapse: collapse; }
+  #ordersList th, #ordersList td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  #ordersList th { background: var(--light); font-size: 11px; text-transform: uppercase; color: var(--slate); position: sticky; top: 0; }
+  .badge { padding: 2px 8px; border-radius: 999px; font-size: 10.5px; font-weight: 700; }
+  .badge.approved { background: #ECFDF5; color: #065F46; }
+  .badge.rejected { background: #FFFBEB; color: #92400E; }
+  .badge.processing_unavailable { background: #FEF2F2; color: #991B1B; }
+  .badge.created { background: #EFF6FF; color: #1E40AF; }
+
+  .log-panel { background: var(--ink); border-radius: 12px; padding: 16px 18px; }
+  .log-panel h2 { margin: 0 0 10px; font-size: 13px; color: #9FB3D9; text-transform: uppercase; letter-spacing: .06em; }
+  #log { font-family: Consolas, "Courier New", monospace; font-size: 12px; color: #D1D5DB; max-height: 220px; overflow-y: auto; line-height: 1.6; }
+  #log .ok { color: #6EE7B7; }
+  #log .warn { color: #FCD34D; }
+  #log .err { color: #FCA5A5; }
+  #log .muted { color: #64748B; }
+
+  .hint {
+    font-size: 12px; color: var(--slate); background: #FFFBEB; border: 1px solid #FDE68A;
+    border-radius: 8px; padding: 10px 12px; margin-bottom: 20px;
+  }
+  code { background: #EEF2F7; padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>PoC — Microservices Architecture Style</h1>
+  <p>Panel visual para demostrar el flujo Customer Service → Order Service → Processing Service, sin usar Swagger ni terminal.</p>
+</header>
+
+<main>
+
+  <div class="hint">
+    Por defecto este panel llama a los tres microservicios en <code>http://127.0.0.1</code> (correr local con
+    uvicorn). Si los estás corriendo en <strong>GitHub Codespaces</strong> (u otro host), abre "Configurar URLs"
+    abajo y pega las 3 URLs reenviadas (deben estar marcadas como <strong>Public</strong> en la pestaña "Ports").
+  </div>
+
+  <div class="card" style="margin-bottom:24px">
+    <h3 style="margin:0">⚙️ Configurar URLs de los servicios</h3>
+    <div class="row2">
+      <div><label>Customer Service (base URL)</label><input id="cfgCustomer" value="http://127.0.0.1:8001" /></div>
+      <div><label>Order Service (base URL)</label><input id="cfgOrder" value="http://127.0.0.1:8002" /></div>
+    </div>
+    <div><label>Processing Service (base URL)</label><input id="cfgProcessing" value="http://127.0.0.1:8003" /></div>
+    <div style="display:flex; gap:8px">
+      <button onclick="applyConfig()">Aplicar</button>
+      <button class="secondary" onclick="resetConfig()">Restaurar 127.0.0.1 (local)</button>
+    </div>
+  </div>
+
+  <div class="services-row">
+    <div class="svc-card" id="svc-customer"><div class="dot" id="dot-customer"></div>
+      <div class="svc-info"><strong>Customer Service</strong><span id="lbl-customer">127.0.0.1:8001</span></div></div>
+    <div class="svc-card" id="svc-order"><div class="dot" id="dot-order"></div>
+      <div class="svc-info"><strong>Order Service</strong><span id="lbl-order">127.0.0.1:8002</span></div></div>
+    <div class="svc-card" id="svc-processing"><div class="dot" id="dot-processing"></div>
+      <div class="svc-info"><strong>Processing Service</strong><span id="lbl-processing">127.0.0.1:8003</span></div></div>
+  </div>
+
+  <div class="diagram">
+    <h2>Flujo en vivo</h2>
+    <div class="nodes">
+      <div class="node customer" id="node-customer">Customer Service<small>valida cliente</small></div>
+      <div class="arrow-wrap">
+        <div class="arrow-label">GET /customers/{id}</div>
+        <div class="arrow-line" id="arrow-oc"><div class="fill"></div></div>
+      </div>
+      <div class="node order" id="node-order">Order Service<small>orquesta la orden</small></div>
+      <div class="arrow-wrap">
+        <div class="arrow-label">POST /process</div>
+        <div class="arrow-line" id="arrow-op"><div class="fill"></div></div>
+      </div>
+      <div class="node processing" id="node-processing">Processing Service<small>procesa la orden</small></div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <span class="step">Paso 1</span>
+      <h3>Crear cliente</h3>
+      <div><label>Nombre</label><input id="custName" value="Jose Pablo Monestel" /></div>
+      <div><label>Correo</label><input id="custEmail" value="jose@example.com" /></div>
+      <button onclick="createCustomer()">Crear cliente</button>
+      <div class="result" id="resultCustomer"></div>
+    </div>
+
+    <div class="card">
+      <span class="step">Paso 2</span>
+      <h3>Crear orden</h3>
+      <div><label>Cliente (id)</label><input id="orderCustomerId" placeholder="Se llena al crear el cliente" /></div>
+      <div><label>Items (separados por coma)</label><input id="orderItems" value="laptop, mouse" /></div>
+      <div class="row2">
+        <div><label>Total</label><input id="orderTotal" type="number" value="950" /></div>
+        <div class="checkbox-row" style="margin-top:22px">
+          <input type="checkbox" id="simulateFail" /> <label style="margin:0" for="simulateFail">Simular rechazo</label>
+        </div>
+      </div>
+      <button onclick="createOrder()">Crear orden</button>
+      <div class="result" id="resultOrder"></div>
+    </div>
+
+    <div class="card">
+      <span class="step">Paso 3</span>
+      <h3>Órdenes registradas</h3>
+      <button class="secondary" onclick="loadOrders()">Actualizar lista</button>
+      <div id="ordersList"><table><thead><tr><th>Estado</th><th>Total</th><th>Id</th></tr></thead><tbody id="ordersBody"></tbody></table></div>
+    </div>
+  </div>
+
+  <div class="log-panel">
+    <h2>Registro de llamadas REST</h2>
+    <div id="log"><div class="muted">Esperando acciones…</div></div>
+  </div>
+
+</main>
+
+<script>
+  const BASE = {
+    customer: "http://127.0.0.1:8001",
+    order: "http://127.0.0.1:8002",
+    processing: "http://127.0.0.1:8003",
+  };
+
+  function stripTrailingSlash(u) { return u.replace(/\/+$/, ""); }
+
+  function applyConfig() {
+    BASE.customer = stripTrailingSlash(document.getElementById("cfgCustomer").value.trim());
+    BASE.order = stripTrailingSlash(document.getElementById("cfgOrder").value.trim());
+    BASE.processing = stripTrailingSlash(document.getElementById("cfgProcessing").value.trim());
+    document.getElementById("lbl-customer").textContent = BASE.customer.replace(/^https?:\/\//, "");
+    document.getElementById("lbl-order").textContent = BASE.order.replace(/^https?:\/\//, "");
+    document.getElementById("lbl-processing").textContent = BASE.processing.replace(/^https?:\/\//, "");
+    log("muted", `Configuración aplicada → customer=${BASE.customer} | order=${BASE.order} | processing=${BASE.processing}`);
+    checkAll();
+  }
+
+  function resetConfig() {
+    document.getElementById("cfgCustomer").value = "http://127.0.0.1:8001";
+    document.getElementById("cfgOrder").value = "http://127.0.0.1:8002";
+    document.getElementById("cfgProcessing").value = "http://127.0.0.1:8003";
+    applyConfig();
+  }
+
+  const logEl = document.getElementById("log");
+  function log(cls, text) {
+    const line = document.createElement("div");
+    line.className = cls;
+    const time = new Date().toLocaleTimeString();
+    line.textContent = `[${time}] ${text}`;
+    logEl.appendChild(line);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function setDot(name, state) {
+    const dot = document.getElementById("dot-" + name);
+    const card = document.getElementById("svc-" + name);
+    dot.className = "dot " + state;
+    card.classList.toggle("active", state === "online");
+  }
+
+  async function checkHealth(name, base) {
+    try {
+      const r = await fetch(base + "/health", { cache: "no-store" });
+      setDot(name, r.ok ? "online" : "offline");
+    } catch (e) {
+      setDot(name, "offline");
+    }
+  }
+  function checkAll() {
+    checkHealth("customer", BASE.customer);
+    checkHealth("order", BASE.order);
+    checkHealth("processing", BASE.processing);
+  }
+  checkAll();
+  setInterval(checkAll, 4000);
+
+  function pulse(nodeId, ms = 900) {
+    const el = document.getElementById(nodeId);
+    el.classList.add("pulse");
+    setTimeout(() => el.classList.remove("pulse"), ms);
+  }
+  function arrow(id, state) {
+    const el = document.getElementById(id);
+    el.className = "arrow-line " + state;
+  }
+  function resetArrows() {
+    arrow("arrow-oc", "");
+    arrow("arrow-op", "");
+  }
+
+  function showResult(id, kind, text) {
+    const el = document.getElementById(id);
+    el.className = "result show " + kind;
+    el.textContent = text;
+  }
+
+  let lastCustomerId = null;
+  let lastOrderId = null;
+
+  async function createCustomer() {
+    resetArrows();
+    pulse("node-customer");
+    const name = document.getElementById("custName").value.trim();
+    const email = document.getElementById("custEmail").value.trim();
+    log("muted", `POST ${BASE.customer}/customers`);
+    try {
+      const r = await fetch(BASE.customer + "/customers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, email }),
+      });
+      const data = await r.json();
+      if (!r.ok) {
+        log("err", `→ ${r.status} ${JSON.stringify(data)}`);
+        showResult("resultCustomer", "err", `Error ${r.status}: ${JSON.stringify(data)}`);
+        return;
+      }
+      log("ok", `→ 201 Created — id ${data.id}`);
+      lastCustomerId = data.id;
+      document.getElementById("orderCustomerId").value = data.id;
+      showResult("resultCustomer", "ok", `Cliente creado ✔\nid: ${data.id}\nnombre: ${data.name}\ncorreo: ${data.email}`);
+    } catch (e) {
+      log("err", `✖ No se pudo conectar con Customer Service (${BASE.customer}). ¿Está corriendo?`);
+      showResult("resultCustomer", "err", `No se pudo conectar con Customer Service en ${BASE.customer}.\n¿Está corriendo? Si usas Codespaces, revisa que el puerto esté marcado como "Public".`);
+      setDot("customer", "offline");
+    }
+  }
+
+  async function createOrder() {
+    resetArrows();
+    pulse("node-order");
+    const customer_id = document.getElementById("orderCustomerId").value.trim();
+    const items = document.getElementById("orderItems").value.split(",").map(s => s.trim()).filter(Boolean);
+    const total = parseFloat(document.getElementById("orderTotal").value);
+    const simulate_processing_failure = document.getElementById("simulateFail").checked;
+
+    if (!customer_id) {
+      showResult("resultOrder", "err", "Primero crea un cliente (Paso 1) o pega un id de cliente válido.");
+      return;
+    }
+
+    log("muted", `POST ${BASE.order}/orders  (customer_id=${customer_id})`);
+    try {
+      const r = await fetch(BASE.order + "/orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ customer_id, items, total, simulate_processing_failure }),
+      });
+
+      if (r.status === 503) {
+        const data = await r.json();
+        log("err", `→ 503 ${data.detail}`);
+        arrow("arrow-oc", "fail");
+        pulse("node-customer");
+        showResult("resultOrder", "err", `503 Service Unavailable\n${data.detail}\n\n(Customer Service no respondió — orden NO creada)`);
+        setDot("customer", "offline");
+        return;
+      }
+      if (r.status === 404) {
+        const data = await r.json();
+        log("warn", `→ 404 ${data.detail}`);
+        arrow("arrow-oc", "ok");
+        pulse("node-customer");
+        showResult("resultOrder", "warn", `404: ${data.detail}\n(el cliente validó, pero ese id no existe)`);
+        return;
+      }
+      const data = await r.json();
+      if (!r.ok) {
+        log("err", `→ ${r.status} ${JSON.stringify(data)}`);
+        showResult("resultOrder", "err", `Error ${r.status}: ${JSON.stringify(data)}`);
+        return;
+      }
+
+      // orden creada: sabemos que Order Service sí validó al cliente
+      arrow("arrow-oc", "ok");
+      pulse("node-customer");
+      lastOrderId = data.id;
+
+      if (data.status === "processing_unavailable") {
+        arrow("arrow-op", "fail");
+        pulse("node-processing");
+        log("err", `→ 201 Created — status: processing_unavailable`);
+        showResult("resultOrder", "warn",
+          `Orden creada, pero Processing Service no respondió ✔ (no se perdió)\n` +
+          `id: ${data.id}\nstatus: ${data.status}\nmotivo: ${data.processing_reason}\n\n` +
+          `Reinicia processing-service y usa el botón de abajo para reprocesarla.`);
+        addRetryButton(data.id);
+      } else {
+        arrow("arrow-op", "ok");
+        pulse("node-processing");
+        const kind = data.status === "approved" ? "ok" : "warn";
+        log(kind === "ok" ? "ok" : "warn", `→ 201 Created — status: ${data.status}`);
+        showResult("resultOrder", kind,
+          `Orden creada ✔\nid: ${data.id}\nstatus: ${data.status}` +
+          (data.processing_reason ? `\nmotivo: ${data.processing_reason}` : ""));
+      }
+      loadOrders();
+    } catch (e) {
+      log("err", `✖ No se pudo conectar con Order Service (${BASE.order}). ¿Está corriendo?`);
+      showResult("resultOrder", "err", `No se pudo conectar con Order Service en ${BASE.order}.\n¿Está corriendo? Si usas Codespaces, revisa que el puerto esté marcado como "Public".`);
+      setDot("order", "offline");
+    }
+  }
+
+  function addRetryButton(orderId) {
+    const el = document.getElementById("resultOrder");
+    const btn = document.createElement("button");
+    btn.textContent = "Reintentar procesamiento";
+    btn.style.marginTop = "8px";
+    btn.onclick = () => retryProcessing(orderId);
+    el.appendChild(document.createElement("br"));
+    el.appendChild(btn);
+  }
+
+  async function retryProcessing(orderId) {
+    pulse("node-order");
+    log("muted", `POST ${BASE.order}/orders/${orderId}/retry-processing`);
+    try {
+      const r = await fetch(`${BASE.order}/orders/${orderId}/retry-processing`, { method: "POST" });
+      const data = await r.json();
+      if (!r.ok) {
+        log("err", `→ ${r.status} ${JSON.stringify(data)}`);
+        return;
+      }
+      if (data.status === "processing_unavailable") {
+        arrow("arrow-op", "fail");
+        pulse("node-processing");
+        log("err", `→ sigue sin responder Processing Service`);
+      } else {
+        arrow("arrow-op", "ok");
+        pulse("node-processing");
+        log("ok", `→ reprocesada — status: ${data.status}`);
+        showResult("resultOrder", "ok", `Orden reprocesada ✔\nid: ${data.id}\nstatus: ${data.status}`);
+      }
+      loadOrders();
+    } catch (e) {
+      log("err", `✖ No se pudo conectar con Order Service.`);
+    }
+  }
+
+  async function loadOrders() {
+    log("muted", `GET ${BASE.order}/orders`);
+    try {
+      const r = await fetch(BASE.order + "/orders");
+      const data = await r.json();
+      const body = document.getElementById("ordersBody");
+      body.innerHTML = "";
+      data.slice().reverse().forEach(o => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td><span class="badge ${o.status}">${o.status}</span></td><td>$${o.total}</td><td style="font-family:Consolas,monospace">${o.id.slice(0,8)}…</td>`;
+        body.appendChild(tr);
+      });
+      log("ok", `→ ${data.length} orden(es)`);
+    } catch (e) {
+      log("err", `✖ No se pudo conectar con Order Service.`);
+    }
+  }
+</script>
+</body>
+</html>

@@ -25,6 +25,7 @@ from uuid import uuid4
 import httpx
 from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel, Field
 
 app = FastAPI(
@@ -192,3 +193,61 @@ def get_order(order_id: str):
     if order is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
     return order
+
+
+# ---------------------------------------------------------------------------
+# Dashboard visual del POC + endpoints "gateway"
+#
+# Order Service ya tiene httpx configurado para hablar con Customer Service y
+# Processing Service, así que también sirve como punto de entrada único para
+# el dashboard HTML: el navegador solo habla con este origen (Order Service),
+# y es Order Service quien reenvía las llamadas a los otros dos servicios por
+# detrás. Esto evita cualquier problema de CORS o de proxys de autenticación
+# (por ejemplo, el de GitHub Codespaces) al abrir el dashboard como página de
+# un origen distinto a cada microservicio.
+# ---------------------------------------------------------------------------
+
+DASHBOARD_FILE = os.path.join(os.path.dirname(__file__), "dashboard.html")
+
+
+@app.get("/dashboard", response_class=HTMLResponse, tags=["Dashboard"])
+def dashboard():
+    with open(DASHBOARD_FILE, "r", encoding="utf-8") as f:
+        return f.read()
+
+
+@app.post("/api/customers", tags=["Dashboard"])
+async def proxy_create_customer(payload: dict):
+    """Reenvía la creación de un cliente a Customer Service (para el dashboard)."""
+    async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS) as client:
+        try:
+            response = await _call_with_retries(
+                lambda: client.post(f"{CUSTOMER_SERVICE_URL}/customers", json=payload)
+            )
+        except (httpx.ConnectError, httpx.TimeoutException):
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Customer Service no está disponible en este momento.",
+            )
+    return JSONResponse(status_code=response.status_code, content=response.json())
+
+
+@app.get("/api/health/customer", tags=["Dashboard"])
+async def proxy_health_customer():
+    async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS) as client:
+        try:
+            response = await client.get(f"{CUSTOMER_SERVICE_URL}/health")
+            return JSONResponse(status_code=response.status_code, content=response.json())
+        except (httpx.ConnectError, httpx.TimeoutException):
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="unavailable")
+
+
+@app.get("/api/health/processing", tags=["Dashboard"])
+async def proxy_health_processing():
+    async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS) as client:
+        try:
+            response = await client.get(f"{PROCESSING_SERVICE_URL}/health")
+            return JSONResponse(status_code=response.status_code, content=response.json())
+        except (httpx.ConnectError, httpx.TimeoutException):
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="unavailable")
+
