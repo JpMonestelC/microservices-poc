@@ -209,7 +209,7 @@
       <span class="step">Paso 3</span>
       <h3>Órdenes registradas</h3>
       <button class="secondary" onclick="loadOrders()">Actualizar lista</button>
-      <div id="ordersList"><table><thead><tr><th>Estado</th><th>Total</th><th>Id</th></tr></thead><tbody id="ordersBody"></tbody></table></div>
+      <div id="ordersList"><table><thead><tr><th>Estado</th><th>Total</th><th>Id</th><th>Acción</th></tr></thead><tbody id="ordersBody"></tbody></table></div>
     </div>
   </div>
 
@@ -431,8 +431,14 @@
       body.innerHTML = "";
       data.slice().reverse().forEach(o => {
         const tr = document.createElement("tr");
-        tr.innerHTML = `<td><span class="badge ${o.status}">${o.status}</span></td><td>$${o.total}</td><td style="font-family:Consolas,monospace">${o.id.slice(0,8)}…</td>`;
+        const retryCell = o.status === "processing_unavailable"
+          ? `<button class="row-retry-btn" data-order-id="${o.id}">Reintentar</button>`
+          : "";
+        tr.innerHTML = `<td><span class="badge ${o.status}">${o.status}</span></td><td>$${o.total}</td><td style="font-family:Consolas,monospace">${o.id.slice(0,8)}…</td><td>${retryCell}</td>`;
         body.appendChild(tr);
+      });
+      body.querySelectorAll(".row-retry-btn").forEach(btn => {
+        btn.onclick = () => retryProcessing(btn.getAttribute("data-order-id"));
       });
       log("ok", `→ ${data.length} orden(es)`);
     } catch (e) {

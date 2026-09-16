@@ -38,6 +38,11 @@ Cada servicio:
 - Docker y Docker Compose (plugin `docker compose`) instalados.
 - Puertos `8001` y `8002` libres en el host.
 
+> **Alternativa sin instalar nada localmente:** este repositorio también corre tal cual dentro de un
+> [GitHub Codespace](https://github.com/features/codespaces) (Menu **Code → Codespaces → Create codespace on
+> main**). El Codespace ya trae Docker instalado; una vez abierto, los pasos de la sección 3 son idénticos,
+> solo que las URLs se acceden desde la pestaña **PORTS** de VS Code en el navegador en vez de `localhost`.
+
 ## 3. Cómo ejecutar el stack
 
 ```bash
@@ -66,7 +71,23 @@ docker compose down
 
 ## 4. Demostración funcional (flujo completo)
 
-### 4.1 Crear un cliente
+### 4.0 Alternativa visual: dashboard (sin terminal ni Swagger)
+
+Order Service sirve un panel HTML propio en **`/dashboard`** (por ejemplo `http://localhost:8002/dashboard`,
+o la URL equivalente reenviada por Codespaces) que permite ejecutar todo el flujo de esta sección con clics en
+vez de comandos: crear cliente, crear orden (con opción de "Simular rechazo"), ver el estado de cada
+microservicio en vivo, la tabla de órdenes y un registro cronológico de las llamadas REST realizadas.
+
+Internamente, `/dashboard` y sus endpoints de apoyo (`/api/customers`, `/api/health/customer`,
+`/api/health/processing`) están implementados en `order-service/main.py`: el navegador solo habla con Order
+Service, que reenvía ("proxea") las llamadas del lado del servidor a Customer Service y Processing Service.
+Esto evita configurar CORS o URLs distintas según dónde se corra el stack (local, Docker Compose o
+Codespaces) — ver el docstring al final de ese archivo para el detalle.
+
+Las secciones 4.1 a 4.4 documentan el mismo flujo por `curl`, útil para probar la API directamente o para
+quien prefiera la terminal.
+
+### 4.1 Crear un cliente (equivalente por curl)
 
 ```bash
 curl -s -X POST http://localhost:8001/customers \
@@ -204,3 +225,60 @@ microservices-poc/
 - httpx (cliente HTTP asíncrono para la comunicación entre servicios)
 - Docker / Docker Compose
 - OpenAPI / Swagger (generado automáticamente por FastAPI)
+
+## 10. Decisiones de diseño y su justificación
+
+Ninguna de las siguientes decisiones es arbitraria: cada una responde a un principio de Microservices
+Architecture cubierto en la investigación, y se documenta aquí para poder defenderlas en una revisión de
+código o de arquitectura.
+
+- **Tres servicios con límites de dominio claros (Customer / Order / Processing).** Cada uno modela un
+  "bounded context" distinto. Se eligieron estos tres porque reproducen el patrón más común para ejemplificar
+  orquestación (Order Service coordina a los otros dos) sin necesitar más servicios para demostrar el punto.
+
+- **Order Service como orquestador único, con comunicación síncrona REST.** Se optó por un servicio que llama
+  a los otros dos (en vez de un patrón de eventos/colas con un broker como RabbitMQ o Kafka) porque el
+  enunciado pide explícitamente demostrar comunicación vía REST APIs. El README y el guion oral explican
+  cuándo convendría la alternativa asíncrona (sección "Comunicación entre microservicios").
+
+- **Almacenamiento en memoria, sin base de datos real.** Mantiene el POC simple y centrado en la arquitectura,
+  no en la persistencia, y de todas formas ilustra el principio "database per service": cada diccionario vive
+  solo dentro de su propio contenedor. Como efecto secundario aprovechado en la demo: al reiniciar un
+  contenedor, sus datos desaparecen, lo cual se usa a propósito para dejar el dashboard limpio entre pruebas.
+
+- **`expose` en vez de `ports` para `processing-service`.** Es la decisión concreta que hace posible el
+  escalado horizontal sin conflictos de puerto (`docker compose up --scale processing-service=3`). Se
+  sacrificó el acceso directo desde el host a cambio de poder demostrar escalabilidad independiente, que es un
+  criterio explícito de la rúbrica (10 puntos de "Dockerización" dependen de que esto funcione en vivo).
+
+- **Timeouts cortos (3 s) y máximo 2 reintentos en Order Service.** Valores elegidos para que la demo en vivo
+  no se sienta "colgada" esperando una respuesta frente al público, sin dejar de ilustrar el patrón real de
+  resiliencia (timeout + retry) mencionado en la Parte 2 de la investigación.
+
+- **Tratamiento distinto del fallo según el servicio que falla.** Si Customer Service no responde, la orden
+  **no se crea** (falla rápido con 503) porque no se puede garantizar que el cliente exista — es un dato
+  crítico para la integridad de la orden. Si Processing Service no responde, la orden **sí se crea** y queda
+  en `processing_unavailable`, porque procesar es un paso posterior que se puede reintentar sin perder lo ya
+  validado. Esta asimetría es intencional: demuestra que "aislamiento de fallos" no significa tratar todos los
+  fallos por igual, sino decidir según qué tan crítico es cada paso del flujo de negocio.
+
+- **CORS abierto (`allow_origins=["*"]`) en los tres servicios.** Simplifica la demo (permite Swagger UI y
+  llamadas de prueba desde cualquier origen). Se documenta en el propio código que en producción se
+  restringiría a una lista blanca de orígenes conocidos. No afecta al dashboard final, que ya no depende de
+  CORS (ver el siguiente punto).
+
+- **Dashboard servido como gateway desde Order Service, en vez de un HTML suelto con URLs configurables.** La
+  primera versión (una página abierta localmente, con las URLs de cada servicio configurables a mano)
+  funcionaba en local pero fallaba en GitHub Codespaces: su proxy de reenvío de puertos responde a peticiones
+  anónimas entre orígenes con una redirección 302 sin cabeceras CORS, que el navegador bloquea. La solución no
+  fue "parchar" CORS, sino eliminar la necesidad de CORS moviendo el reenvío al servidor (un patrón simple de
+  API Gateway): el navegador solo habla con Order Service, y es Order Service quien reenvía las llamadas a
+  Customer Service y Processing Service del lado del servidor. Esto además simplifica la demo: cero
+  configuración, y el mismo dashboard funciona igual en local, con Docker Compose o en Codespaces.
+
+- **GitHub Codespaces como entorno de ejecución para la demo, en vez de Docker Desktop + WSL2 local.**
+  Decisión práctica para evitar instalar software adicional en la máquina del estudiante y reducir puntos de
+  falla el día de la presentación. Codespaces ya trae Docker instalado y expone temporalmente los puertos del
+  contenedor a internet. Esto no cambia en nada el código, el `docker-compose.yml` ni los `Dockerfile` del
+  POC: la Dockerización es exactamente la misma que correr el stack en cualquier máquina con Docker instalado.
+
